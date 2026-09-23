@@ -1130,7 +1130,11 @@ function App() {
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeApp}
-                    initial={{ opacity: 0 }}
+                    initial={
+                      activeApp === "codex" && codexInstanceId
+                        ? false
+                        : { opacity: 0 }
+                    }
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15 }}
@@ -1211,6 +1215,9 @@ function App() {
       }
     })();
 
+    if (activeApp === "codex" && codexInstanceId) {
+      return <div className="flex flex-1 min-h-0 flex-col">{content}</div>;
+    }
     return (
       <AnimatePresence mode="wait">
         <motion.div
