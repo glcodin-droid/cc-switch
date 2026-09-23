@@ -1,81 +1,61 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Layers, Play, FolderOpen, RotateCcw, Trash2 } from "lucide-react";
-import { parse } from "smol-toml";
+import { FolderOpen, Play, Plus, X } from "lucide-react";
 import { open as pickFile } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FullScreenPanel } from "@/components/common/FullScreenPanel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { InstanceSelector } from "@/components/common/InstanceSelector";
-import JsonEditor from "@/components/JsonEditor";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import {
   codexInstancesApi as api,
   type CodexInstance,
-  type InstanceConfig,
 } from "@/lib/api/codexInstances";
-import { providersApi } from "@/lib/api/providers";
 import { settingsApi } from "@/lib/api/settings";
-import type { Provider } from "@/types";
 
-export function CodexInstances() {
+export function CodexInstances({
+  selectedId,
+  onSelect,
+}: {
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
   const { t } = useTranslation();
   const label = (key: string) => t(`codexInstances.${key}`);
-  const [open, setOpen] = useState(false);
   const [instances, setInstances] = useState<CodexInstance[]>([]);
-  const [providers, setProviders] = useState<Record<string, Provider>>({});
-  const [snapshot, setSnapshot] = useState<InstanceConfig | null>(null);
-  const [draft, setDraft] = useState("");
-  const [model, setModel] = useState("");
-  const [effort, setEffort] = useState("xhigh");
-  const [modelBaseline, setModelBaseline] = useState({
-    model: "",
-    effort: "xhigh",
-  });
-  const [preset, setPreset] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    configDir: "",
-    userDataDir: "",
-    appPath: "",
-  });
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [discard, setDiscard] = useState<(() => void) | null>(null);
-  const [forget, setForget] = useState(false);
-  const [dark, setDark] = useState(
-    document.documentElement.classList.contains("dark"),
-  );
-  const modelDirty =
-    model !== modelBaseline.model || effort !== modelBaseline.effort;
-  const dirty = snapshot !== null && (draft !== snapshot.config || modelDirty);
-  const formDirty = adding && Object.values(form).some(Boolean);
+  const empty = { name: "", configDir: "", userDataDir: "", appPath: "" };
+  const [form, setForm] = useState(empty);
+  const current = instances.find((i) => i.id === selectedId);
+  const load = async () => {
+    const list = await api.list();
+    setInstances(list);
+    return list;
+  };
   useEffect(() => {
-    const observer = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark")),
-    );
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    return () => observer.disconnect();
+    let active = true;
+    api
+      .list()
+      .then((list) => {
+        if (active) setInstances(list);
+      })
+      .catch((e) => {
+        if (active) setError(String(e));
+      });
+    return () => {
+      active = false;
+    };
   }, []);
-
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
     setError("");
@@ -87,230 +67,134 @@ export function CodexInstances() {
       setBusy(false);
     }
   };
-  const replaceDraft = (config: string) => {
-    setDraft(config);
-    try {
-      const d = parse(config);
-      const next = {
-        model: typeof d.model === "string" ? d.model : "",
-        effort:
-          typeof d.model_reasoning_effort === "string"
-            ? d.model_reasoning_effort
-            : "xhigh",
-      };
-      setModel(next.model);
-      setEffort(next.effort);
-      setModelBaseline(next);
-    } catch {
-      /* Keep invalid text visible so the user can correct it. */
-    }
-  };
-  const accept = (value: InstanceConfig) => {
-    setSnapshot(value);
-    replaceDraft(value.config);
-    setPreset("");
-    setAdding(false);
-    setForget(false);
-    setForm({ name: "", configDir: "", userDataDir: "", appPath: "" });
-  };
-  const guard = (action: () => void) => {
-    if (busy) return;
-    if (dirty || formDirty) setDiscard(() => action);
-    else action();
-  };
-  const load = (id: string) =>
-    run(async () => {
-      accept(await api.read(id));
-    });
-  const begin = () => {
-    setOpen(true);
-    setForm({ name: "", configDir: "", userDataDir: "", appPath: "" });
-    setSnapshot(null);
-    setAdding(false);
-    void run(async () => {
-      const [list, all] = await Promise.all([
-        api.list(),
-        providersApi.getAll("codex"),
-      ]);
-      setInstances(list);
-      setProviders(all);
-      if (list.length) accept(await api.read(list[0].id));
-      else setAdding(true);
-    });
-  };
-  const save = () =>
-    run(async () => {
-      if (!snapshot) return;
-      const config = modelDirty
-        ? await api.editModel(draft, model, effort)
-        : draft;
-      accept(await api.save(snapshot.instance.id, snapshot.revision, config));
-      toast.success(label("saved"));
-    });
-  const register = () =>
-    run(async () => {
-      const item = await api.register({
-        ...form,
-        appPath: form.appPath.trim() || null,
-      });
-      setInstances(await api.list());
-      accept(await api.read(item.id));
-    });
-  const footer = (
-    <>
-      <Button
-        variant="outline"
-        disabled={busy}
-        onClick={() => guard(() => setOpen(false))}
-      >
-        {label("close")}
-      </Button>
-      {adding ? (
-        <Button
-          disabled={
-            busy ||
-            !form.name.trim() ||
-            !form.configDir.trim() ||
-            !form.userDataDir.trim()
-          }
-          onClick={() => void register()}
-        >
-          {label("register")}
-        </Button>
-      ) : (
-        snapshot && (
-          <>
-            <Button
-              variant="outline"
-              disabled={busy || dirty || !snapshot.instance.appPath}
-              onClick={() =>
-                void run(async () => {
-                  await api.launch(snapshot.instance.id);
-                  toast.success(label("launched"));
-                })
-              }
-            >
-              <Play className="h-4 w-4" />
-              {label("launch")}
-            </Button>
-            <Button
-              disabled={busy || !dirty || !!discard}
-              onClick={() => void save()}
-            >
-              {label("save")}
-            </Button>
-          </>
-        )
-      )}
-    </>
-  );
-
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={begin} title={label("title")}>
-        <Layers className="h-4 w-4" />
-        {label("entry")}
-      </Button>
-      <FullScreenPanel
-        isOpen={open}
-        title={label("title")}
-        onClose={() => guard(() => setOpen(false))}
-        footer={footer}
-        motionPreset="none"
+      <div className="flex items-center gap-1 max-w-[19rem]">
+        <InstanceSelector
+          instances={[
+            { id: "default", name: label("defaultInstance") },
+            ...instances,
+          ]}
+          value={selectedId ?? "default"}
+          disabled={busy}
+          label={label("select")}
+          addLabel={label("register")}
+          onSelect={(id) => onSelect(id === "default" ? null : id)}
+          onManage={() => setOpen(true)}
+          manageLabel={label("instanceSettings")}
+          onLaunch={
+            current?.appPath
+              ? () => {
+                  void run(async () => {
+                    await api.launch(current.id);
+                    toast.success(label("launched"));
+                  });
+                }
+              : undefined
+          }
+          launchLabel={label("launch")}
+          onAdd={() => {
+            setForm(empty);
+            setOpen(true);
+          }}
+        />
+      </div>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!busy) setOpen(v);
+        }}
       >
-        <div className="mx-auto max-w-3xl space-y-6">
-          <p className="text-sm text-muted-foreground">
-            {label("description")}
-          </p>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400 whitespace-pre-wrap"
-            >
-              {error}
-            </p>
-          )}
-          {discard && (
-            <div
-              role="alert"
-              className="rounded-lg border border-border-default bg-muted/30 p-4 space-y-3"
-            >
-              <p className="text-sm">{label("unsaved")}</p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setDiscard(null)}>
-                  {label("keepEditing")}
+        <DialogContent
+          zIndex="top"
+          className="max-w-xl max-h-[90vh] overflow-y-auto"
+        >
+          <DialogHeader>
+            <DialogTitle>{label("instanceSettings")}</DialogTitle>
+            <DialogDescription>{label("registryHelp")}</DialogDescription>
+          </DialogHeader>
+          <div className="px-6 py-4 space-y-4">
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            {instances.map((i) => (
+              <div
+                key={i.id}
+                className="rounded-lg border border-border-default p-3 flex items-center gap-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{i.name}</p>
+                  <p
+                    className="text-xs text-muted-foreground truncate"
+                    title={i.configDir}
+                  >
+                    {i.configDir}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={busy || !i.appPath}
+                  title={label("launch")}
+                  onClick={() =>
+                    void run(async () => {
+                      await api.launch(i.id);
+                      toast.success(label("launched"));
+                    })
+                  }
+                >
+                  <Play className="h-4 w-4" />
                 </Button>
                 <Button
-                  onClick={() => {
-                    const action = discard;
-                    setDiscard(null);
-                    action();
-                  }}
+                  variant="ghost"
+                  size="icon"
+                  disabled={busy}
+                  title={label("forget")}
+                  onClick={() =>
+                    void run(async () => {
+                      await api.forget(i.id);
+                      await load();
+                      if (selectedId === i.id) onSelect(null);
+                    })
+                  }
                 >
-                  {label("discard")}
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
-          )}
-          <InstanceSelector
-            instances={instances}
-            value={adding ? "" : (snapshot?.instance.id ?? "")}
-            disabled={busy || !!discard}
-            label={label("select")}
-            addLabel={label("register")}
-            onSelect={(id) =>
-              guard(() => {
-                void load(id);
-              })
-            }
-            onAdd={() =>
-              guard(() => {
-                setAdding(true);
-                setForm({
-                  name: "",
-                  configDir: "",
-                  userDataDir: "",
-                  appPath: "",
-                });
-                setSnapshot(null);
-                setDraft("");
-              })
-            }
-          />
-          {adding ? (
-            <div className="rounded-xl border border-border-default bg-card p-5 space-y-4">
-              <h3 className="text-base font-semibold">{label("register")}</h3>
-              <p className="text-sm text-muted-foreground">
-                {label("registerHelp")}
-              </p>
+            ))}
+            <div className="border-t border-border-default pt-4 space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                {label("register")}
+              </h3>
               {(["name", "configDir", "userDataDir", "appPath"] as const).map(
                 (key) => (
-                  <div key={key} className="space-y-2">
+                  <div key={key} className="space-y-1.5">
                     <Label htmlFor={`instance-${key}`}>{label(key)}</Label>
                     <div className="flex gap-2">
                       <Input
                         id={`instance-${key}`}
-                        disabled={busy}
                         value={form[key]}
+                        disabled={busy}
+                        placeholder={label(`${key}Placeholder`)}
                         onChange={(e) =>
                           setForm({ ...form, [key]: e.target.value })
                         }
-                        placeholder={label(`${key}Placeholder`)}
                       />
                       {key !== "name" && (
                         <Button
                           variant="outline"
                           size="icon"
-                          disabled={busy}
                           title={label("browse")}
-                          aria-label={`${label("browse")} ${label(key)}`}
+                          disabled={busy}
                           onClick={() =>
                             void run(async () => {
                               const path =
                                 key === "appPath"
                                   ? await pickFile({
                                       multiple: false,
-                                      directory: false,
                                       filters: [
                                         {
                                           name: "macOS application",
@@ -322,7 +206,7 @@ export function CodexInstances() {
                                       form[key] || undefined,
                                     );
                               if (typeof path === "string")
-                                setForm((prev) => ({ ...prev, [key]: path }));
+                                setForm((old) => ({ ...old, [key]: path }));
                             })
                           }
                         >
@@ -337,221 +221,40 @@ export function CodexInstances() {
                 {label("launcherHelp")}
               </p>
             </div>
-          ) : (
-            snapshot && (
-              <>
-                <div className="rounded-xl border border-border-default bg-card p-5 space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-semibold">
-                        <strong>{snapshot.instance.name}</strong>
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {snapshot.provider ?? "openai"} ·{" "}
-                        {snapshot.model ?? "—"} · {snapshot.effort ?? "—"}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() =>
-                        guard(() => {
-                          void load(snapshot.instance.id);
-                        })
-                      }
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      {label("reload")}
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_12rem] gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="instance-model">{label("model")}</Label>
-                      <Input
-                        id="instance-model"
-                        value={model}
-                        disabled={busy}
-                        onChange={(e) => setModel(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="instance-effort">{label("effort")}</Label>
-                      <Select
-                        value={effort}
-                        disabled={busy}
-                        onValueChange={setEffort}
-                      >
-                        <SelectTrigger id="instance-effort">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[
-                            "none",
-                            "minimal",
-                            "low",
-                            "medium",
-                            "high",
-                            "xhigh",
-                            "max",
-                            "ultra",
-                          ].map((v) => (
-                            <SelectItem key={v} value={v}>
-                              {v}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {label("modelHelp")}
-                  </p>
-                </div>
-                <Accordion
-                  type="multiple"
-                  className="rounded-xl border border-border-default bg-card px-5"
-                >
-                  <AccordionItem value="paths">
-                    <AccordionTrigger>
-                      {label("instanceSettings")}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-3 text-sm break-all">
-                        <div>
-                          <Label>{label("target")}</Label>
-                          <p className="mt-1 text-muted-foreground">
-                            {snapshot.instance.configDir}/config.toml
-                          </p>
-                        </div>
-                        <div>
-                          <Label>{label("userDataDir")}</Label>
-                          <p className="mt-1 text-muted-foreground">
-                            {snapshot.instance.userDataDir}
-                          </p>
-                        </div>
-                        <div>
-                          <Label>{label("appPath")}</Label>
-                          <p className="mt-1 text-muted-foreground">
-                            {snapshot.instance.appPath ?? "—"}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy || dirty}
-                          onClick={() => setForget(true)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          {label("forget")}
-                        </Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  <AccordionItem value="preset">
-                    <AccordionTrigger>{label("importPreset")}</AccordionTrigger>
-                    <AccordionContent>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        {label("presetHelp")}
-                      </p>
-                      <div className="flex gap-3">
-                        <Select
-                          value={preset}
-                          disabled={busy}
-                          onValueChange={setPreset}
-                        >
-                          <SelectTrigger aria-label={label("preset")}>
-                            <SelectValue placeholder={label("preset")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.values(providers).map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          variant="outline"
-                          disabled={busy || !preset}
-                          onClick={() =>
-                            void run(async () =>
-                              replaceDraft(
-                                await api.previewProvider(draft, preset),
-                              ),
-                            )
-                          }
-                        >
-                          {label("preview")}
-                        </Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  <AccordionItem value="config" className="border-b-0">
-                    <AccordionTrigger>{label("advanced")}</AccordionTrigger>
-                    <AccordionContent>
-                      <p className="mb-3 text-xs text-muted-foreground">
-                        {label("configHelp")}
-                      </p>
-                      <JsonEditor
-                        ariaLabel={label("config")}
-                        value={draft}
-                        onChange={replaceDraft}
-                        darkMode={dark}
-                        language="javascript"
-                        showValidation={false}
-                        height={300}
-                        readOnly={busy}
-                      />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-                <p className="text-xs text-muted-foreground break-all">
-                  {label("target")}: {snapshot.instance.configDir}/config.toml
-                  <br />
-                  {label("saveHelp")}
-                </p>
-                {forget && (
-                  <div
-                    role="alert"
-                    className="rounded-lg border border-border-default p-4 space-y-3"
-                  >
-                    <p className="text-sm">{label("forgetHelp")}</p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setForget(false)}
-                        disabled={busy}
-                      >
-                        {label("cancel")}
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(async () => {
-                            await api.forget(snapshot.instance.id);
-                            const list = await api.list();
-                            setInstances(list);
-                            if (list.length) accept(await api.read(list[0].id));
-                            else {
-                              setSnapshot(null);
-                              setAdding(true);
-                              setForget(false);
-                            }
-                          })
-                        }
-                      >
-                        {label("forget")}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )
-          )}
-        </div>
-      </FullScreenPanel>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setOpen(false)}
+            >
+              {label("close")}
+            </Button>
+            <Button
+              disabled={
+                busy ||
+                !form.name.trim() ||
+                !form.configDir.trim() ||
+                !form.userDataDir.trim()
+              }
+              onClick={() =>
+                void run(async () => {
+                  const item = await api.register({
+                    ...form,
+                    appPath: form.appPath || null,
+                  });
+                  await load();
+                  onSelect(item.id);
+                  setOpen(false);
+                  setForm(empty);
+                })
+              }
+            >
+              {label("register")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

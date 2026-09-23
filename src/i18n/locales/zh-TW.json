@@ -3314,6 +3314,10 @@
     "instanceSettings": "實例設定",
     "advanced": "進階設定",
     "modelHelp": "模型與推理強度會一起儲存，可用選項由供應商決定。",
-    "configHelp": "編輯此實例的完整 TOML，包括連線標頭、MCP 和外掛，不套用全域通用設定。"
+    "configHelp": "編輯此實例的完整 TOML，包括連線標頭、MCP 和外掛，不套用全域通用設定。",
+    "defaultInstance": "預設實例",
+    "registryHelp": "選擇實例後，在原本的供應商清單中設定。登記不複製登入或工作階段；移除只解除登記。",
+    "scopedHelp": "新增、編輯、複製、啟用和刪除僅作用於目前實例；全域設定、MCP 和 Skills 面板維持原有範圍。",
+    "deleteProviderHelp": "僅刪除此實例未啟用的供應商設定，不影響其他實例。"
   }
 }

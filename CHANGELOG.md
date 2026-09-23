@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Community macOS Apple Silicon prerelease from glcodin-droid/cc-switch.
 
 - Manage independent Codex configuration and desktop-data directories in one window.
-- Reuse the existing full-screen settings panel, selector, accordion, and code editor; save model and effort changes directly.
+- Select the instance in the original header and use the original provider cards and add/edit forms; each instance has its own provider library and active selection.
 - Protect external edits, back up config before writes, and preserve per-instance login, sessions, headers, and MCP settings.
 - Use an explicit macOS application/launcher with isolated environment arguments.
 - Keep updates on the fork via manual downloads; do not load the upstream updater.

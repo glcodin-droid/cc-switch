@@ -1377,6 +1377,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            codex_instances::get_codex_instance_providers,
+            codex_instances::put_codex_instance_provider,
+            codex_instances::switch_codex_instance_provider,
+            codex_instances::delete_codex_instance_provider,
             codex_instances::list_codex_instances,
             codex_instances::register_codex_instance,
             codex_instances::read_codex_instance,

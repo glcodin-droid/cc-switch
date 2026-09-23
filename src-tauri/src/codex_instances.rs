@@ -494,6 +494,268 @@ pub fn launch_codex_instance(id: String) -> Result<(), String> {
     .to_string())
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstanceLibrary {
+    providers: Vec<crate::provider::Provider>,
+    current_provider_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceProviderState {
+    config: InstanceConfig,
+    providers: Vec<crate::provider::Provider>,
+    current_provider_id: String,
+}
+
+fn library_path(item: &CodexInstance) -> Result<PathBuf, AppError> {
+    // IDs are backend-generated; registry tampering must not turn them into paths.
+    uuid::Uuid::parse_str(&item.id).map_err(|_| invalid("实例 ID 无效", "Invalid instance ID"))?;
+    Ok(get_app_config_dir()
+        .join("instance-providers")
+        .join(format!("{}.json", item.id)))
+}
+
+fn read_library(
+    item: &CodexInstance,
+    config: &InstanceConfig,
+) -> Result<InstanceLibrary, AppError> {
+    let path = library_path(item)?;
+    let mut library: InstanceLibrary = if path.exists() {
+        let bytes = fs::read(&path).map_err(|e| AppError::io(&path, e))?;
+        serde_json::from_slice(&bytes).map_err(|e| AppError::json(&path, e))?
+    } else {
+        let doc: DocumentMut = config
+            .config
+            .parse()
+            .map_err(|_| invalid("配置无效", "Invalid config"))?;
+        let id = config.provider.as_deref().unwrap_or("openai");
+        let name = doc
+            .get("model_providers")
+            .and_then(|x| x.get(id))
+            .and_then(|x| x.get("name"))
+            .and_then(Item::as_str)
+            .unwrap_or(id);
+        let mut provider = crate::provider::Provider::with_id(
+            "live".into(),
+            name.into(),
+            serde_json::json!({"auth": {}, "config": config.config}),
+            None,
+        );
+        provider.category = Some(if id == "openai" { "official" } else { "custom" }.into());
+        provider.meta = Some(crate::provider::ProviderMeta {
+            common_config_enabled: Some(false),
+            ..Default::default()
+        });
+        InstanceLibrary {
+            providers: vec![provider],
+            current_provider_id: "live".into(),
+        }
+    };
+    // Read current disk content into the active card; never backfill another home.
+    if let Some(active) = library
+        .providers
+        .iter_mut()
+        .find(|p| p.id == library.current_provider_id)
+    {
+        active.settings_config["config"] = serde_json::Value::String(config.config.clone());
+    }
+    Ok(library)
+}
+
+fn instance_providers(item: CodexInstance) -> Result<InstanceProviderState, AppError> {
+    let config = snapshot(item.clone())?;
+    let library = read_library(&item, &config)?;
+    Ok(InstanceProviderState {
+        config,
+        providers: library.providers,
+        current_provider_id: library.current_provider_id,
+    })
+}
+
+#[tauri::command]
+pub fn get_codex_instance_providers(id: String) -> Result<InstanceProviderState, String> {
+    instance_providers(get_instance(&id).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+fn with_instance_catalog(
+    item: &CodexInstance,
+    library: &InstanceLibrary,
+    text: String,
+) -> Result<String, AppError> {
+    let provider = library
+        .providers
+        .iter()
+        .find(|p| p.id == library.current_provider_id)
+        .ok_or_else(|| invalid("未找到当前供应商", "Active provider missing"))?;
+    let mut doc = text
+        .parse::<DocumentMut>()
+        .map_err(|_| invalid("配置无效", "Invalid config"))?;
+    let pointer = doc
+        .get("model_catalog_json")
+        .and_then(Item::as_str)
+        .map(str::to_owned);
+    let owned = pointer
+        .as_ref()
+        .is_some_and(|p| p.starts_with("cc-switch-instance-catalog-") && !p.contains('/'));
+    let profile = crate::proxy::providers::resolve_codex_catalog_tool_profile(provider);
+    let catalog = crate::codex_config::codex_model_catalog_from_settings(
+        &provider.settings_config,
+        &text,
+        profile,
+    )?;
+    if let Some(catalog) = catalog {
+        if pointer.is_some() && !owned {
+            return Err(invalid("此实例已有自定义模型目录；请先移除 model_catalog_json 再应用模型映射", "This instance has a custom model catalog; remove model_catalog_json before applying model mappings"));
+        }
+        let bytes = serde_json::to_vec_pretty(&catalog)
+            .map_err(|source| AppError::JsonSerialize { source })?;
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        let name = format!("cc-switch-instance-catalog-{}.json", &digest[..16]);
+        let path = item.config_dir.join(&name);
+        if path.is_symlink() {
+            return Err(invalid(
+                "模型目录文件不能是软链接",
+                "Model catalog file cannot be a symlink",
+            ));
+        }
+        // Content-addressed files never replace the catalog of a still-active
+        // config if the subsequent compare-and-save fails.
+        atomic_write_private(&path, &bytes)?;
+        doc["model_catalog_json"] = toml_edit::value(name);
+    } else if owned {
+        doc.remove("model_catalog_json");
+    }
+    Ok(doc.to_string())
+}
+
+fn commit_library(
+    item: CodexInstance,
+    expected_revision: &str,
+    library: InstanceLibrary,
+    next_config: Option<String>,
+) -> Result<InstanceProviderState, AppError> {
+    let before = snapshot(item.clone())?;
+    if before.revision != expected_revision {
+        return Err(invalid(
+            "实例配置已变化，请重新加载",
+            "Instance config changed; reload",
+        ));
+    }
+    let next_config = next_config
+        .map(|text| with_instance_catalog(&item, &library, text))
+        .transpose()?;
+    let path = library_path(&item)?;
+    let old = if path.exists() {
+        Some(fs::read(&path).map_err(|e| AppError::io(&path, e))?)
+    } else {
+        None
+    };
+    atomic_write_private(
+        &path,
+        &serde_json::to_vec_pretty(&library)
+            .map_err(|source| AppError::JsonSerialize { source })?,
+    )?;
+    if let Some(text) = next_config {
+        if let Err(error) = save_config(item.clone(), expected_revision, &text) {
+            let restored = match old {
+                Some(bytes) => atomic_write_private(&path, &bytes),
+                None => fs::remove_file(&path).map_err(|e| AppError::io(&path, e)),
+            };
+            if let Err(rollback) = restored {
+                return Err(AppError::Message(format!(
+                    "{error}; rollback failed: {rollback}"
+                )));
+            }
+            return Err(error);
+        }
+    }
+    instance_providers(item)
+}
+
+#[tauri::command]
+pub fn put_codex_instance_provider(
+    id: String,
+    expected_revision: String,
+    mut provider: crate::provider::Provider,
+) -> Result<InstanceProviderState, String> {
+    let _guard = OPERATIONS.lock().map_err(|e| e.to_string())?;
+    let item = get_instance(&id).map_err(|e| e.to_string())?;
+    let config = snapshot(item.clone()).map_err(|e| e.to_string())?;
+    let mut library = read_library(&item, &config).map_err(|e| e.to_string())?;
+    if provider.name.trim().is_empty() {
+        return Err(invalid("供应商名称不能为空", "Provider name required").to_string());
+    }
+    // Validation rejects formats needing the one global proxy and managed OAuth.
+    preset_config(&config.config, &provider).map_err(|e| e.to_string())?;
+    provider
+        .meta
+        .get_or_insert_with(Default::default)
+        .common_config_enabled = Some(false);
+    let active = provider.id == library.current_provider_id;
+    let next = if active {
+        let raw = provider
+            .settings_config
+            .get("config")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let auth = provider
+            .settings_config
+            .get("auth")
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+        Some(
+            crate::codex_config::prepare_codex_provider_live_config(&auth, raw)
+                .map_err(|e| e.to_string())?,
+        )
+    } else {
+        None
+    };
+    match library.providers.iter_mut().find(|p| p.id == provider.id) {
+        Some(old) => *old = provider,
+        None => library.providers.push(provider),
+    };
+    commit_library(item, &expected_revision, library, next).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn switch_codex_instance_provider(
+    id: String,
+    expected_revision: String,
+    provider_id: String,
+) -> Result<InstanceProviderState, String> {
+    let _guard = OPERATIONS.lock().map_err(|e| e.to_string())?;
+    let item = get_instance(&id).map_err(|e| e.to_string())?;
+    let config = snapshot(item.clone()).map_err(|e| e.to_string())?;
+    let mut library = read_library(&item, &config).map_err(|e| e.to_string())?;
+    let provider = library
+        .providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .ok_or("Provider not found in this instance")?;
+    let next = preset_config(&config.config, provider).map_err(|e| e.to_string())?;
+    library.current_provider_id = provider_id;
+    commit_library(item, &expected_revision, library, Some(next)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_codex_instance_provider(
+    id: String,
+    expected_revision: String,
+    provider_id: String,
+) -> Result<InstanceProviderState, String> {
+    let _guard = OPERATIONS.lock().map_err(|e| e.to_string())?;
+    let item = get_instance(&id).map_err(|e| e.to_string())?;
+    let config = snapshot(item.clone()).map_err(|e| e.to_string())?;
+    let mut library = read_library(&item, &config).map_err(|e| e.to_string())?;
+    if library.current_provider_id == provider_id {
+        return Err(invalid("不能删除当前供应商", "Cannot delete the active provider").to_string());
+    }
+    library.providers.retain(|p| p.id != provider_id);
+    commit_library(item, &expected_revision, library, None).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -641,6 +903,87 @@ mod tests {
         assert!(!args.contains(&"-c".to_owned()));
     }
 
+    #[test]
+    #[serial_test::serial]
+    fn provider_library_operations_are_scoped_and_preserve_other_home() {
+        struct RestoreEnv(Option<std::ffi::OsString>);
+        impl Drop for RestoreEnv {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(v) => std::env::set_var("CC_SWITCH_TEST_HOME", v),
+                    None => std::env::remove_var("CC_SWITCH_TEST_HOME"),
+                }
+            }
+        }
+        let _env = RestoreEnv(std::env::var_os("CC_SWITCH_TEST_HOME"));
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("CC_SWITCH_TEST_HOME", temp.path());
+        assert!(get_app_config_dir().starts_with(temp.path()));
+        let mut a = instance(temp.path(), "a");
+        let mut b = instance(temp.path(), "b");
+        a.id = uuid::Uuid::new_v4().to_string();
+        b.id = uuid::Uuid::new_v4().to_string();
+        write_registry(&registry_path(), &[a.clone(), b.clone()]).unwrap();
+        let state = get_codex_instance_providers(b.id.clone()).unwrap();
+        let mut backup = state.providers[0].clone();
+        backup.id = "backup".into();
+        backup.name = "Backup".into();
+        backup.settings_config["config"]=serde_json::json!("model='gpt-5.6-sol'\nmodel_provider='custom'\n[model_providers.custom]\nname='Test'\nwire_api='responses'\nbase_url='https://example.test'\n");
+        backup.settings_config["modelCatalog"] =
+            serde_json::json!({"models":[{"model":"gpt-5.6-sol"}]});
+        let state =
+            put_codex_instance_provider(b.id.clone(), state.config.revision, backup).unwrap();
+        assert_eq!(state.current_provider_id, "live");
+        assert_eq!(
+            snapshot(b.clone()).unwrap().model.as_deref(),
+            Some("gpt-6-astra")
+        );
+        let state =
+            switch_codex_instance_provider(b.id.clone(), state.config.revision, "backup".into())
+                .unwrap();
+        assert_eq!(state.current_provider_id, "backup");
+        let catalog_doc: DocumentMut = state.config.config.parse().unwrap();
+        let catalog_file = catalog_doc["model_catalog_json"].as_str().unwrap();
+        assert!(b.config_dir.join(catalog_file).is_file());
+        assert!(!a.config_dir.join(catalog_file).exists());
+        assert_eq!(state.config.model.as_deref(), Some("gpt-5.6-sol"));
+        assert_eq!(
+            snapshot(a.clone()).unwrap().model.as_deref(),
+            Some("gpt-6-astra")
+        );
+        assert_eq!(
+            get_codex_instance_providers(a.id.clone())
+                .unwrap()
+                .providers
+                .len(),
+            1
+        );
+        assert!(!library_path(&a).unwrap().exists());
+        assert_eq!(
+            fs::read_to_string(a.config_dir.join("auth.json")).unwrap(),
+            "keep-login"
+        );
+        assert_eq!(
+            fs::read_to_string(b.config_dir.join("auth.json")).unwrap(),
+            "keep-login"
+        );
+        assert!(delete_codex_instance_provider(
+            b.id.clone(),
+            state.config.revision.clone(),
+            "backup".into()
+        )
+        .is_err());
+        let file = library_path(&b).unwrap();
+        let before = fs::read(&file).unwrap();
+        assert!(
+            switch_codex_instance_provider(b.id.clone(), "stale".into(), "live".into()).is_err()
+        );
+        assert_eq!(fs::read(file).unwrap(), before);
+        let state =
+            delete_codex_instance_provider(b.id.clone(), state.config.revision, "live".into())
+                .unwrap();
+        assert_eq!(state.providers.len(), 1);
+    }
     #[test]
     fn preset_handles_inline_tables_and_rejects_proxy_only_formats() {
         let mut provider = crate::provider::Provider::with_id(

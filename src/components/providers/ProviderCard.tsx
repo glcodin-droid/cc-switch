@@ -49,6 +49,7 @@ interface DragHandleProps {
 }
 
 interface ProviderCardProps {
+  instanceMode?: boolean;
   provider: Provider;
   isCurrent: boolean;
   appId: AppId;
@@ -61,7 +62,7 @@ interface ProviderCardProps {
   onRemoveFromConfig?: (provider: Provider) => void;
   onDisableOmo?: () => void;
   onDisableOmoSlim?: () => void;
-  onConfigureUsage: (provider: Provider) => void;
+  onConfigureUsage?: (provider: Provider) => void;
   onOpenWebsite: (url: string) => void;
   onDuplicate: (provider: Provider) => void;
   onTest?: (provider: Provider) => void;
@@ -166,6 +167,7 @@ const extractApiUrl = (provider: Provider, fallbackText: string) => {
 };
 
 export function ProviderCard({
+  instanceMode = false,
   provider,
   isCurrent,
   appId,
@@ -199,7 +201,9 @@ export function ProviderCard({
   onSetAsDefault,
 }: ProviderCardProps) {
   const { t } = useTranslation();
-  const codexOfficialIdentity = resolveCodexOfficialIdentity(appId, provider);
+  const codexOfficialIdentity = instanceMode
+    ? null
+    : resolveCodexOfficialIdentity(appId, provider);
   const managedCodexAccountId = resolveManagedAccountId(
     provider.meta,
     "codex_oauth",
@@ -236,7 +240,7 @@ export function ProviderCard({
   const { data: health } = useProviderHealth(
     provider.id,
     appId,
-    isProxyAppId(appId),
+    !instanceMode && isProxyAppId(appId),
   );
 
   const fallbackUrlText = t("provider.notConfigured", {
@@ -268,7 +272,8 @@ export function ProviderCard({
 
   const isBoundCodexOfficial = codexOfficialIdentity === "managed_account";
   const usageEnabled =
-    provider.meta?.usage_script?.enabled ?? isBoundCodexOfficial;
+    !instanceMode &&
+    (provider.meta?.usage_script?.enabled ?? isBoundCodexOfficial);
   const isOfficial = isOfficialProvider(provider, appId);
   const supportsOfficialSubscription =
     isOfficial && ["claude", "codex", "gemini", "grokbuild"].includes(appId);
@@ -417,6 +422,9 @@ export function ProviderCard({
             >
               <GripVertical className="h-4 w-4" />
             </button>
+          )}
+          {instanceMode && !dragHandleProps && (
+            <span aria-hidden className="w-[22px] shrink-0" />
           )}
 
           <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-muted flex items-center justify-center border border-border group-hover:scale-105 transition-transform duration-300">
@@ -719,7 +727,9 @@ export function ProviderCard({
                 (isCodexOauth && !isBoundCodexOfficial) ||
                 isXaiOauth
                   ? undefined
-                  : () => onConfigureUsage(provider)
+                  : onConfigureUsage
+                    ? () => onConfigureUsage(provider)
+                    : undefined
               }
               onDelete={() => onDelete(provider)}
               onRemoveFromConfig={

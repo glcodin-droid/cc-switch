@@ -1,3 +1,4 @@
+import type { Provider } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface CodexInstance {
@@ -17,7 +18,32 @@ export interface InstanceConfig {
   effort: string | null;
 }
 
+export interface InstanceProviderState {
+  config: InstanceConfig;
+  providers: Provider[];
+  currentProviderId: string;
+}
 export const codexInstancesApi = {
+  providers: (id: string) =>
+    invoke<InstanceProviderState>("get_codex_instance_providers", { id }),
+  putProvider: (id: string, expectedRevision: string, provider: Provider) =>
+    invoke<InstanceProviderState>("put_codex_instance_provider", {
+      id,
+      expectedRevision,
+      provider,
+    }),
+  switchProvider: (id: string, expectedRevision: string, providerId: string) =>
+    invoke<InstanceProviderState>("switch_codex_instance_provider", {
+      id,
+      expectedRevision,
+      providerId,
+    }),
+  deleteProvider: (id: string, expectedRevision: string, providerId: string) =>
+    invoke<InstanceProviderState>("delete_codex_instance_provider", {
+      id,
+      expectedRevision,
+      providerId,
+    }),
   list: () => invoke<CodexInstance[]>("list_codex_instances"),
   register: (instance: Omit<CodexInstance, "id">) =>
     invoke<CodexInstance>("register_codex_instance", { ...instance }),

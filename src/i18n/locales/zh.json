@@ -3313,6 +3313,10 @@
     "instanceSettings": "实例设置",
     "advanced": "高级配置",
     "modelHelp": "模型和推理强度会一起保存，实际可用档位由供应商决定。",
-    "configHelp": "编辑此实例的完整 TOML，包括连接请求头、MCP 和插件，不套用全局通用配置。"
+    "configHelp": "编辑此实例的完整 TOML，包括连接请求头、MCP 和插件，不套用全局通用配置。",
+    "defaultInstance": "默认实例",
+    "registryHelp": "选择实例后，在原来的供应商列表中配置。登记不会复制登录或会话；移除只解除登记。",
+    "scopedHelp": "新增、编辑、复制、启用和删除仅作用于当前实例；全局设置、MCP 和 Skills 面板保持原有管理范围。",
+    "deleteProviderHelp": "只删除当前实例中未启用的供应商配置，不影响其他实例。"
   }
 }

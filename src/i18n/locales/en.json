@@ -3313,6 +3313,10 @@
     "instanceSettings": "Instance settings",
     "advanced": "Advanced configuration",
     "modelHelp": "Model and effort changes are saved together. Availability depends on your provider.",
-    "configHelp": "Edit this instance’s full TOML, including connection headers, MCP and plugins. No global common configuration is applied."
+    "configHelp": "Edit this instance’s full TOML, including connection headers, MCP and plugins. No global common configuration is applied.",
+    "defaultInstance": "Default instance",
+    "registryHelp": "Select an instance, then use the existing provider list. Registration does not copy login or sessions; removal only unregisters it.",
+    "scopedHelp": "Add, edit, duplicate, enable and delete apply only to this instance. Global settings, MCP and Skills panels keep their original scope.",
+    "deleteProviderHelp": "Delete this inactive provider from this instance only. Other instances are unchanged."
   }
 }

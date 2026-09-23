@@ -617,4 +617,4 @@ MIT © Jason Young
 
 ## 此 Fork：Codex 多实例（实验功能）
 
-Codex 页面新增「Codex 多实例」入口，可登记多套已有配置目录，分别编辑模型、推理强度和 TOML，并在 macOS 分别启动。保存前备份并检查外部修改，不切换全局 Codex 目录、不改写登录或会话。使用方式和适用边界见 [Codex 多实例说明](docs/codex-instances.md)。
+Codex 页面新增「Codex 多实例」入口，可登记多套已有配置目录，在原版供应商卡片和表单中分别新增、编辑、启用配置，并在 macOS 分别启动。保存前备份并检查外部修改，不切换全局 Codex 目录、不改写登录或会话。使用方式和适用边界见 [Codex 多实例说明](docs/codex-instances.md)。
