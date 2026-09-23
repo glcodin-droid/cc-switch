@@ -3307,6 +3307,12 @@
     "unsaved": "This instance has unsaved changes. Discard them and continue?",
     "keepEditing": "Keep editing",
     "discard": "Discard draft",
-    "close": "Close"
+    "close": "Close",
+    "entry": "Instances",
+    "browse": "Browse",
+    "instanceSettings": "Instance settings",
+    "advanced": "Advanced configuration",
+    "modelHelp": "Model and effort changes are saved together. Availability depends on your provider.",
+    "configHelp": "Edit this instance’s full TOML, including connection headers, MCP and plugins. No global common configuration is applied."
   }
 }

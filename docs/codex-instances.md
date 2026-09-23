@@ -1,4 +1,4 @@
-# Codex instances (experimental fork)
+# Codex instances — community fork
 
 Manage existing Codex desktop environments from one CC Switch window without
 switching the global Codex configuration directory. Each environment keeps its
@@ -13,7 +13,8 @@ own config, authentication, conversations, and Electron data.
 3. Optionally set an installed macOS `.app` path for launching. If an instance
    needs an environment-provided API key, use its existing `.app` launcher that
    reads the key. Its paths must match the registered directories.
-4. Select an instance. Edit model/effort and **Update draft**, or edit TOML directly.
+4. Select an instance. Edit model/effort directly; use **Advanced configuration** for TOML.
+   The selector, full-screen panel, and editor reuse the existing CC Switch UI components.
 5. Check the save target and **Save to this instance**. Restart the corresponding
    Codex to load the change. **Launch instance** sends its `CODEX_HOME` and
    `CODEX_ELECTRON_USER_DATA_PATH` to macOS `open`, without changing global
@@ -59,6 +60,22 @@ mutex; this is not a cross-process locking protocol. Duplicate/overlapping homes
 and symlinked config files are rejected. Directory mappings are revalidated at
 launch.
 
+## Release and installation
+
+Version `3.20.4-codex.1` is a macOS Apple Silicon prerelease named **CC Switch Codex**.
+Download ZIP or DMG from https://github.com/glcodin-droid/cc-switch/releases.
+This community build uses an ad-hoc signature, not Apple Developer ID notarization.
+macOS may require an explicit user decision in Privacy & Security on first open.
+
+This build reuses the existing `~/.cc-switch` provider database and settings. Quit
+the original CC Switch before opening the fork; do not run both managers against
+the same database. Your multiple Codex instances can still run simultaneously.
+The fork has its own application identifier and URL scheme. Updates are manual
+from this fork’s releases; the upstream automatic updater is not loaded.
+
+The first supported adapter is Codex. `InstanceSelector` is reusable by other
+apps, but their config and launch adapters are not implemented in this release.
+
 ## Validation
 
 ```sh
@@ -74,3 +91,7 @@ creation, and launch environment. This does not exercise an upstream model API
 or claim to fix cross-model encrypted-compaction behavior.
 
 Launching is macOS-only. Windows/Linux launching is not implemented or validated.
+
+Build macOS artifacts after the test gates with `bash scripts/build-codex-release.sh`.
+Use the pinned Rust toolchain and pnpm version. This creates ZIP, DMG and SHA256SUMS.txt,
+without uploading them. Upstream signing workflows are disabled on this fork.

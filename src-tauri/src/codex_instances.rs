@@ -111,6 +111,12 @@ fn config_path(home: &Path) -> Result<PathBuf, AppError> {
 fn resolved_data_dir(path: &Path) -> Result<PathBuf, AppError> {
     absolute_path(path)?;
     if path.exists() {
+        if !path.is_dir() {
+            return Err(invalid(
+                "桌面数据路径必须是目录",
+                "Desktop data path must be a directory",
+            ));
+        }
         return fs::canonicalize(path).map_err(|e| AppError::io(path, e));
     }
     let parent = path
@@ -266,6 +272,7 @@ pub fn register_codex_instance(
         &list,
     )
     .map_err(|e| e.to_string())?;
+    snapshot(item.clone()).map_err(|e| e.to_string())?;
     list.push(item.clone());
     write_registry(&path, &list).map_err(|e| e.to_string())?;
     Ok(item)
@@ -561,7 +568,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let a = instance(temp.path(), "a");
         let a = validate_instance(a, &[]).unwrap();
-        assert!(validate_instance(a.clone(), &[a.clone()]).is_err());
+        assert!(validate_instance(a.clone(), std::slice::from_ref(&a)).is_err());
         let mut b = instance(temp.path(), "b");
         b.user_data_dir = a.user_data_dir.clone();
         assert!(validate_instance(b, &[a]).is_err());
@@ -586,7 +593,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let a = instance(temp.path(), "a");
         let file = temp.path().join("instances.json");
-        write_registry(&file, &[a.clone()]).unwrap();
+        write_registry(&file, std::slice::from_ref(&a)).unwrap();
         assert_eq!(read_registry(&file).unwrap()[0].id, a.id);
         write_registry(&file, &[]).unwrap();
         assert!(a.config_dir.join("config.toml").exists());

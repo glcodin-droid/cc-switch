@@ -3272,7 +3272,7 @@
     "refresh": "重新整理"
   },
   "codexInstances": {
-    "title": "Codex 多實例",
+    "title": "Codex 實例",
     "description": "分別管理每個 Codex 的設定目錄。選擇實例不會切換全域供應商或影響其他實例。",
     "select": "選擇實例",
     "register": "登記現有實例",
@@ -3308,6 +3308,12 @@
     "unsaved": "目前實例有未儲存的草稿。是否放棄草稿並繼續？",
     "keepEditing": "繼續編輯",
     "discard": "放棄草稿",
-    "close": "關閉"
+    "close": "關閉",
+    "entry": "實例管理",
+    "browse": "瀏覽",
+    "instanceSettings": "實例設定",
+    "advanced": "進階設定",
+    "modelHelp": "模型與推理強度會一起儲存，可用選項由供應商決定。",
+    "configHelp": "編輯此實例的完整 TOML，包括連線標頭、MCP 和外掛，不套用全域通用設定。"
   }
 }

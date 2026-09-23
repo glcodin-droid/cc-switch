@@ -3271,7 +3271,7 @@
     "refresh": "刷新"
   },
   "codexInstances": {
-    "title": "Codex 多实例",
+    "title": "Codex 实例",
     "description": "分别管理每个 Codex 的配置目录。选择实例不会切换全局供应商或影响其他实例。",
     "select": "选择实例",
     "register": "登记现有实例",
@@ -3307,6 +3307,12 @@
     "unsaved": "当前实例有未保存的草稿。是否放弃草稿并继续？",
     "keepEditing": "继续编辑",
     "discard": "放弃草稿",
-    "close": "关闭"
+    "close": "关闭",
+    "entry": "实例管理",
+    "browse": "浏览",
+    "instanceSettings": "实例设置",
+    "advanced": "高级配置",
+    "modelHelp": "模型和推理强度会一起保存，实际可用档位由供应商决定。",
+    "configHelp": "编辑此实例的完整 TOML，包括连接请求头、MCP 和插件，不套用全局通用配置。"
   }
 }

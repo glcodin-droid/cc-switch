@@ -1,3 +1,9 @@
+> **Community fork:** CC Switch Codex adds independent Codex instance management.
+> Downloads: https://github.com/glcodin-droid/cc-switch/releases
+> First release: macOS Apple Silicon preview; ad-hoc signed, not Apple-notarized.
+> It shares the existing CC Switch database, so quit the original manager first.
+> [Usage and scope](docs/codex-instances.md). Upstream documentation and credits follow.
+
 <div align="center">
 
 # CC Switch
