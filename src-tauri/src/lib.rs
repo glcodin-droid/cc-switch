@@ -6,6 +6,7 @@ mod claude_mcp;
 mod claude_plugin;
 mod codex_config;
 mod codex_history_migration;
+mod codex_instances;
 mod codex_state_db;
 mod commands;
 mod config;
@@ -1386,6 +1387,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            codex_instances::list_codex_instances,
+            codex_instances::register_codex_instance,
+            codex_instances::read_codex_instance,
+            codex_instances::save_codex_instance,
+            codex_instances::forget_codex_instance,
+            codex_instances::launch_codex_instance,
+            codex_instances::preview_codex_instance_provider,
+            codex_instances::edit_codex_instance_model,
             commands::get_providers,
             commands::get_current_provider,
             commands::add_provider,

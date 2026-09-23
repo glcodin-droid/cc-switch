@@ -64,6 +64,7 @@ import {
 } from "@/lib/platform";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher";
+import { CodexInstances } from "@/components/providers/CodexInstances";
 import { ProviderList } from "@/components/providers/ProviderList";
 import { AddProviderDialog } from "@/components/providers/AddProviderDialog";
 import { EditProviderDialog } from "@/components/providers/EditProviderDialog";
@@ -1416,6 +1417,11 @@ function App() {
                   ) : null}
                 </div>
               )}
+            {currentView === "providers" && activeApp === "codex" && (
+              <div style={{ WebkitAppRegion: "no-drag" } as any}>
+                <CodexInstances />
+              </div>
+            )}
             {currentView === "providers" &&
               activeApp !== "mcode" &&
               (settingsData?.showProfileSwitcher ?? true) && (

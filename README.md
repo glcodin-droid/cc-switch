@@ -605,3 +605,7 @@ For new features, please open an issue for discussion before submitting a PR. PR
 ## License
 
 MIT © Jason Young
+
+## This fork: Codex instances (experimental)
+
+The Codex page includes an independent instance manager for existing config homes, model/effort editing, guarded config saves, and macOS launching. It does not switch the global Codex home or rewrite login/session files. See [usage and limitations](docs/codex-instances.md).
