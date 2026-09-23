@@ -31,6 +31,7 @@ const DEFAULT_CODEX_COMMON_CONFIG_SNIPPET = `# Common Codex config
 # Add your common TOML configuration here`;
 
 interface UseCodexCommonConfigProps {
+  disabled?: boolean;
   codexConfig: string;
   onConfigChange: (config: string) => void;
   initialData?: {
@@ -45,6 +46,7 @@ interface UseCodexCommonConfigProps {
  * 从 config.json 读取和保存，支持从 localStorage 平滑迁移
  */
 export function useCodexCommonConfig({
+  disabled = false,
   codexConfig,
   onConfigChange,
   initialData,
@@ -119,6 +121,12 @@ export function useCodexCommonConfig({
 
   // 初始化：从 config.json 加载，支持从 localStorage 迁移
   useEffect(() => {
+    if (disabled) {
+      setCommonConfigSnippetState("");
+      setUseCommonConfig(false);
+      setIsLoading(false);
+      return;
+    }
     let mounted = true;
 
     const loadSnippet = async () => {

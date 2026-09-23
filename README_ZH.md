@@ -1,3 +1,9 @@
+> **社区 Fork：CC Switch Codex**，增加 Codex 独立实例管理。
+> 下载：https://github.com/glcodin-droid/cc-switch/releases
+> 首版仅发布 macOS Apple Silicon 预览包，使用临时签名，未经过 Apple 公证。
+> 沿用原 CC Switch 数据库，使用前请先退出原版管理器；多个 Codex 仍可同时运行。
+> [使用方式与能力边界](docs/codex-instances.md)。下方保留上游说明和致谢。
+
 <div align="center">
 
 # CC Switch
@@ -608,3 +614,7 @@ pnpm test:unit --coverage
 ## License
 
 MIT © Jason Young
+
+## 此 Fork：Codex 多实例（实验功能）
+
+Codex 页面新增「Codex 多实例」入口，可登记多套已有配置目录，在原版供应商卡片和表单中分别新增、编辑、启用配置，并在 macOS 分别启动。保存前备份并检查外部修改，不切换全局 Codex 目录、不改写登录或会话。使用方式和适用边界见 [Codex 多实例说明](docs/codex-instances.md)。

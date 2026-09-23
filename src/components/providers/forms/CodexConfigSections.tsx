@@ -95,6 +95,7 @@ export const CodexAuthSection: React.FC<CodexAuthSectionProps> = ({
 };
 
 interface CodexConfigSectionProps {
+  showCommonConfig?: boolean;
   value: string;
   onChange: (value: string) => void;
   providerName?: string;
@@ -111,6 +112,7 @@ interface CodexConfigSectionProps {
  * CodexConfigSection - Config TOML editor section
  */
 export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
+  showCommonConfig = true,
   value,
   onChange,
   providerName,
@@ -270,27 +272,31 @@ export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
             </label>
           )}
 
-          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={useCommonConfig}
-              onChange={(e) => onCommonConfigToggle(e.target.checked)}
-              className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-800 border-border-default rounded focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2"
-            />
-            {t("codexConfig.writeCommonConfig")}
-          </label>
+          {showCommonConfig && (
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={useCommonConfig}
+                onChange={(e) => onCommonConfigToggle(e.target.checked)}
+                className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-800 border-border-default rounded focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2"
+              />
+              {t("codexConfig.writeCommonConfig")}
+            </label>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={onEditCommonConfig}
-          className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
-        >
-          {t("codexConfig.editCommonConfig")}
-        </button>
-      </div>
+      {showCommonConfig && (
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={onEditCommonConfig}
+            className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
+          >
+            {t("codexConfig.editCommonConfig")}
+          </button>
+        </div>
+      )}
 
       {commonConfigError && (
         <p className="text-xs text-red-500 dark:text-red-400 text-right">

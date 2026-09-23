@@ -6,6 +6,7 @@ mod claude_mcp;
 mod claude_plugin;
 mod codex_config;
 mod codex_history_migration;
+mod codex_instances;
 mod codex_state_db;
 mod commands;
 mod config;
@@ -514,17 +515,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             set_windows_app_user_model_id(app.handle());
 
-            // 注册 Updater 插件（桌面端）；放在 logger 之后，确保失败可诊断。
-            #[cfg(desktop)]
-            {
-                if let Err(e) = app
-                    .handle()
-                    .plugin(tauri_plugin_updater::Builder::new().build())
-                {
-                    // 若配置不完整（如缺少 pubkey），跳过 Updater 而不中断应用
-                    log::warn!("初始化 Updater 插件失败，已跳过：{e}");
-                }
-            }
+            // This community fork ships manual releases; never install an upstream updater.
 
             // 注入 AppHandle 给 usage_events，让无 AppHandle 持有的写日志路径
             // 也能向前端推送 `usage-log-recorded`。
@@ -1386,6 +1377,18 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            codex_instances::get_codex_instance_providers,
+            codex_instances::put_codex_instance_provider,
+            codex_instances::switch_codex_instance_provider,
+            codex_instances::delete_codex_instance_provider,
+            codex_instances::list_codex_instances,
+            codex_instances::register_codex_instance,
+            codex_instances::read_codex_instance,
+            codex_instances::save_codex_instance,
+            codex_instances::forget_codex_instance,
+            codex_instances::launch_codex_instance,
+            codex_instances::preview_codex_instance_provider,
+            codex_instances::edit_codex_instance_model,
             commands::get_providers,
             commands::get_current_provider,
             commands::add_provider,

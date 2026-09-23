@@ -1,3 +1,9 @@
+> **Community fork:** CC Switch Codex adds independent Codex instance management.
+> Downloads: https://github.com/glcodin-droid/cc-switch/releases
+> First release: macOS Apple Silicon preview; ad-hoc signed, not Apple-notarized.
+> It shares the existing CC Switch database, so quit the original manager first.
+> [Usage and scope](docs/codex-instances.md). Upstream documentation and credits follow.
+
 <div align="center">
 
 # CC Switch
@@ -605,3 +611,7 @@ For new features, please open an issue for discussion before submitting a PR. PR
 ## License
 
 MIT © Jason Young
+
+## This fork: Codex instances (experimental)
+
+The Codex page includes an independent instance manager for existing config homes, original provider-card editing, guarded config saves, and macOS launching. It does not switch the global Codex home or rewrite login/session files. See [usage and limitations](docs/codex-instances.md).

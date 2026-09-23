@@ -28,6 +28,7 @@ interface EditProviderDialogProps {
     originalId?: string;
   }) => Promise<void> | void;
   appId: AppId;
+  instanceName?: string;
   isProxyTakeover?: boolean; // 代理接管模式下不读取 live（避免显示被接管后的代理配置）
 }
 
@@ -123,6 +124,7 @@ export function EditProviderDialog({
   onSubmit,
   appId,
   isProxyTakeover = false,
+  instanceName,
 }: EditProviderDialogProps) {
   const { t } = useTranslation();
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
@@ -194,7 +196,7 @@ export function EditProviderDialog({
 
       // 代理接管模式：Live 配置已被代理改写，读取 live 会导致编辑界面展示代理地址/占位符等内容
       // 因此直接回退到 SSOT（数据库）配置，避免用户困惑与误保存
-      if (isProxyTakeover) {
+      if (isProxyTakeover || instanceName) {
         if (!cancelled) {
           setLiveSettings(null);
           setHasLoadedLive(true);
@@ -265,7 +267,7 @@ export function EditProviderDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, provider?.id, appId, hasLoadedLive, isProxyTakeover]); // 只依赖 provider.id，不依赖整个 provider 对象
+  }, [open, provider?.id, appId, hasLoadedLive, isProxyTakeover, instanceName]); // 只依赖 provider.id，不依赖整个 provider 对象
 
   // Legacy official cards may have no category; their live logout still owns auth.
   const isCodexOfficialProvider =
@@ -372,7 +374,12 @@ export function EditProviderDialog({
   return (
     <FullScreenPanel
       isOpen={open}
-      title={t("provider.editProvider")}
+      title={
+        instanceName
+          ? `${t("provider.editProvider")} · ${instanceName}`
+          : t("provider.editProvider")
+      }
+      motionPreset={instanceName ? "none" : "fade"}
       onClose={handlePanelClose}
       contentClassName={appId === "pi" ? "pb-0" : undefined}
       footer={
@@ -389,6 +396,7 @@ export function EditProviderDialog({
     >
       <ProviderForm
         appId={appId}
+        instanceMode={!!instanceName}
         providerId={provider.id}
         submitLabel={t("common.save")}
         onSubmit={handleSubmit}

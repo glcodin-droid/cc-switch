@@ -4,6 +4,7 @@ import { CodexAuthSection, CodexConfigSection } from "./CodexConfigSections";
 import { CodexCommonConfigModal } from "./CodexCommonConfigModal";
 
 interface CodexConfigEditorProps {
+  showCommonConfig?: boolean;
   authValue: string;
 
   configValue: string;
@@ -42,6 +43,7 @@ interface CodexConfigEditorProps {
 }
 
 const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
+  showCommonConfig = true,
   authValue,
   configValue,
   providerName,
@@ -90,6 +92,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
       {/* Config TOML Section */}
       <CodexConfigSection
+        showCommonConfig={showCommonConfig}
         value={configValue}
         onChange={onConfigChange}
         providerName={providerName}
