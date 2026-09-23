@@ -216,7 +216,7 @@ export function CodexInstances() {
         title={label("title")}
         onClose={() => guard(() => setOpen(false))}
         footer={footer}
-        motionPreset="slide-from-right"
+        motionPreset="none"
       >
         <div className="mx-auto max-w-3xl space-y-6">
           <p className="text-sm text-muted-foreground">
