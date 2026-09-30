@@ -64,6 +64,8 @@ import {
 } from "@/lib/platform";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher";
+import { CodexInstanceProviders } from "@/components/providers/CodexInstanceProviders";
+import { CodexInstances } from "@/components/providers/CodexInstances";
 import { ProviderList } from "@/components/providers/ProviderList";
 import { AddProviderDialog } from "@/components/providers/AddProviderDialog";
 import { EditProviderDialog } from "@/components/providers/EditProviderDialog";
@@ -185,6 +187,14 @@ function App() {
     useState<SkillsPageSource>("repos");
   const [settingsDefaultTab, setSettingsDefaultTab] = useState("general");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [codexInstanceId, setCodexInstanceId] = useState<string | null>(() =>
+    localStorage.getItem("ccswitch:codexInstance"),
+  );
+  const selectCodexInstance = (id: string | null) => {
+    setCodexInstanceId(id);
+    if (id) localStorage.setItem("ccswitch:codexInstance", id);
+    else localStorage.removeItem("ccswitch:codexInstance");
+  };
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [mcpManagementBusy, setMcpManagementBusy] = useState(false);
   const [skillsManagementBusy, setSkillsManagementBusy] = useState(false);
@@ -1120,66 +1130,83 @@ function App() {
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeApp}
-                    initial={{ opacity: 0 }}
+                    initial={
+                      activeApp === "codex" && codexInstanceId
+                        ? false
+                        : { opacity: 0 }
+                    }
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15 }}
                     className="space-y-4"
                   >
-                    <ProviderList
-                      providers={providers}
-                      currentProviderId={currentProviderId}
-                      appId={activeApp}
-                      isLoading={isLoading}
-                      isProxyRunning={currentAppUsesProxy && isProxyRunning}
-                      isProxyTakeover={
-                        isProxyRunning && isCurrentAppTakeoverActive
-                      }
-                      activeProviderId={activeProviderId}
-                      onSwitch={
-                        activeApp === "pi"
-                          ? handleEnablePiProvider
-                          : switchProvider
-                      }
-                      onEdit={(provider) => {
-                        setEditingProvider(provider);
-                      }}
-                      onDelete={(provider) =>
-                        setConfirmAction({ provider, action: "delete" })
-                      }
-                      onRemoveFromConfig={
-                        activeApp === "opencode" ||
-                        activeApp === "openclaw" ||
-                        activeApp === "hermes" ||
-                        activeApp === "pi" ||
-                        activeApp === "mcode"
-                          ? (provider) =>
-                              setConfirmAction({ provider, action: "remove" })
-                          : undefined
-                      }
-                      onDisableOmo={
-                        activeApp === "opencode" ? handleDisableOmo : undefined
-                      }
-                      onDisableOmoSlim={
-                        activeApp === "opencode"
-                          ? handleDisableOmoSlim
-                          : undefined
-                      }
-                      onDuplicate={handleDuplicateProvider}
-                      onConfigureUsage={setUsageProvider}
-                      onOpenWebsite={handleOpenWebsite}
-                      onOpenTerminal={
-                        activeApp === "claude" ? handleOpenTerminal : undefined
-                      }
-                      onCreate={() => setIsAddOpen(true)}
-                      onSetAsDefault={
-                        activeApp === "openclaw"
-                          ? setAsDefaultModel
-                          : activeApp === "hermes"
-                            ? switchProvider
+                    {activeApp === "codex" && codexInstanceId ? (
+                      <CodexInstanceProviders
+                        key={codexInstanceId}
+                        instanceId={codexInstanceId}
+                        addOpen={isAddOpen}
+                        onAddChange={setIsAddOpen}
+                      />
+                    ) : (
+                      <ProviderList
+                        providers={providers}
+                        currentProviderId={currentProviderId}
+                        appId={activeApp}
+                        isLoading={isLoading}
+                        isProxyRunning={currentAppUsesProxy && isProxyRunning}
+                        isProxyTakeover={
+                          isProxyRunning && isCurrentAppTakeoverActive
+                        }
+                        activeProviderId={activeProviderId}
+                        onSwitch={
+                          activeApp === "pi"
+                            ? handleEnablePiProvider
+                            : switchProvider
+                        }
+                        onEdit={(provider) => {
+                          setEditingProvider(provider);
+                        }}
+                        onDelete={(provider) =>
+                          setConfirmAction({ provider, action: "delete" })
+                        }
+                        onRemoveFromConfig={
+                          activeApp === "opencode" ||
+                          activeApp === "openclaw" ||
+                          activeApp === "hermes" ||
+                          activeApp === "pi" ||
+                          activeApp === "mcode"
+                            ? (provider) =>
+                                setConfirmAction({ provider, action: "remove" })
                             : undefined
-                      }
-                    />
+                        }
+                        onDisableOmo={
+                          activeApp === "opencode"
+                            ? handleDisableOmo
+                            : undefined
+                        }
+                        onDisableOmoSlim={
+                          activeApp === "opencode"
+                            ? handleDisableOmoSlim
+                            : undefined
+                        }
+                        onDuplicate={handleDuplicateProvider}
+                        onConfigureUsage={setUsageProvider}
+                        onOpenWebsite={handleOpenWebsite}
+                        onOpenTerminal={
+                          activeApp === "claude"
+                            ? handleOpenTerminal
+                            : undefined
+                        }
+                        onCreate={() => setIsAddOpen(true)}
+                        onSetAsDefault={
+                          activeApp === "openclaw"
+                            ? setAsDefaultModel
+                            : activeApp === "hermes"
+                              ? switchProvider
+                              : undefined
+                        }
+                      />
+                    )}
                   </motion.div>
                 </AnimatePresence>
               </div>
@@ -1188,6 +1215,9 @@ function App() {
       }
     })();
 
+    if (activeApp === "codex" && codexInstanceId) {
+      return <div className="flex flex-1 min-h-0 flex-col">{content}</div>;
+    }
     return (
       <AnimatePresence mode="wait">
         <motion.div
@@ -1397,7 +1427,8 @@ function App() {
 
           <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5">
             {currentView === "providers" &&
-              (activeApp === "claude-desktop" || proxyAppId) && (
+              (activeApp === "claude-desktop" || proxyAppId) &&
+              !(activeApp === "codex" && codexInstanceId) && (
                 <div
                   className="flex shrink-0 items-center gap-1.5"
                   style={{ WebkitAppRegion: "no-drag" } as any}
@@ -1416,9 +1447,18 @@ function App() {
                   ) : null}
                 </div>
               )}
+            {currentView === "providers" && activeApp === "codex" && (
+              <div style={{ WebkitAppRegion: "no-drag" } as any}>
+                <CodexInstances
+                  selectedId={codexInstanceId}
+                  onSelect={selectCodexInstance}
+                />
+              </div>
+            )}
             {currentView === "providers" &&
               activeApp !== "mcode" &&
-              (settingsData?.showProfileSwitcher ?? true) && (
+              (settingsData?.showProfileSwitcher ?? true) &&
+              !(activeApp === "codex" && codexInstanceId) && (
                 <div
                   className="flex shrink-0 items-center"
                   style={{ WebkitAppRegion: "no-drag" } as any}
@@ -1784,7 +1824,7 @@ function App() {
       </main>
 
       <AddProviderDialog
-        open={isAddOpen}
+        open={isAddOpen && !(activeApp === "codex" && codexInstanceId)}
         onOpenChange={setIsAddOpen}
         appId={activeApp}
         onSubmit={addProvider}

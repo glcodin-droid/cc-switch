@@ -249,6 +249,7 @@ type LocalProxyRequestOverridesBuildResult = ReturnType<
 >;
 
 export interface ProviderFormProps {
+  instanceMode?: boolean;
   appId: AppId;
   providerId?: string;
   submitLabel: string;
@@ -289,6 +290,7 @@ export function ProviderForm(props: ProviderFormProps) {
 }
 
 function ProviderFormFull({
+  instanceMode = false,
   appId,
   providerId,
   submitLabel,
@@ -323,7 +325,9 @@ function ProviderFormFull({
   const queryClient = useQueryClient();
   const { data: settingsData } = useSettingsQuery();
   const showCommonConfigNotice =
-    settingsData != null && settingsData.commonConfigConfirmed !== true;
+    !instanceMode &&
+    settingsData != null &&
+    settingsData.commonConfigConfirmed !== true;
   const isDarkMode = useDarkMode();
 
   const handleCommonConfigConfirm = async () => {
@@ -863,6 +867,7 @@ function ProviderFormFull({
     handleExtract: handleCodexExtract,
     clearCommonConfigError: clearCodexCommonConfigError,
   } = useCodexCommonConfig({
+    disabled: instanceMode,
     codexConfig,
     onConfigChange: handleCodexConfigChange,
     initialData: appId === "codex" ? initialData : undefined,
@@ -2635,6 +2640,7 @@ function ProviderFormFull({
           {appId === "codex" ? (
             <>
               <CodexConfigEditor
+                showCommonConfig={!instanceMode}
                 authValue={codexAuth}
                 configValue={codexConfig}
                 providerName={form.watch("name")}

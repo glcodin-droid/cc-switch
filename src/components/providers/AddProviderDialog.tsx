@@ -30,6 +30,7 @@ interface AddProviderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   appId: AppId;
+  instanceName?: string;
   onSubmit: (
     provider: Omit<Provider, "id"> & {
       providerKey?: string;
@@ -44,11 +45,13 @@ export function AddProviderDialog({
   open,
   onOpenChange,
   appId,
+  instanceName,
   onSubmit,
 }: AddProviderDialogProps) {
   const { t } = useTranslation();
   // OpenCode and OpenClaw don't support universal providers
   const showUniversalTab =
+    !instanceName &&
     appId !== "opencode" &&
     appId !== "openclaw" &&
     appId !== "hermes" &&
@@ -406,7 +409,12 @@ export function AddProviderDialog({
   return (
     <FullScreenPanel
       isOpen={open}
-      title={t("provider.addNewProvider")}
+      motionPreset={instanceName ? "none" : "fade"}
+      title={
+        instanceName
+          ? `${t("provider.addNewProvider")} · ${instanceName}`
+          : t("provider.addNewProvider")
+      }
       onClose={handlePanelClose}
       footer={footer}
       contentClassName={appId === "pi" ? "pt-3 pb-0" : "pt-3"}
@@ -427,6 +435,7 @@ export function AddProviderDialog({
 
           <TabsContent value="app-specific" className="mt-0">
             <ProviderForm
+              instanceMode={!!instanceName}
               appId={appId}
               submitLabel={t("common.add")}
               onSubmit={handleSubmit}
@@ -445,6 +454,7 @@ export function AddProviderDialog({
       ) : (
         // OpenCode/OpenClaw: directly show form without tabs
         <ProviderForm
+          instanceMode={!!instanceName}
           appId={appId}
           submitLabel={t("common.add")}
           onSubmit={handleSubmit}
