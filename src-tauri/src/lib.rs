@@ -1382,6 +1382,8 @@ pub fn run() {
             codex_instances::switch_codex_instance_provider,
             codex_instances::delete_codex_instance_provider,
             codex_instances::list_codex_instances,
+            codex_instances::discover_codex_instances,
+            codex_instances::inspect_codex_instance_config,
             codex_instances::register_codex_instance,
             codex_instances::read_codex_instance,
             codex_instances::save_codex_instance,

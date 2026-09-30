@@ -18,6 +18,19 @@ export interface InstanceConfig {
   effort: string | null;
 }
 
+export interface InstanceCandidate {
+  name: string;
+  configDir: string;
+  model: string | null;
+  provider: string | null;
+}
+
+export interface InstanceDiscovery {
+  configs: InstanceCandidate[];
+  apps: string[];
+  searchDir: string;
+}
+
 export interface InstanceProviderState {
   config: InstanceConfig;
   providers: Provider[];
@@ -45,8 +58,14 @@ export const codexInstancesApi = {
       providerId,
     }),
   list: () => invoke<CodexInstance[]>("list_codex_instances"),
-  register: (instance: Omit<CodexInstance, "id">) =>
-    invoke<CodexInstance>("register_codex_instance", { ...instance }),
+  discover: () => invoke<InstanceDiscovery>("discover_codex_instances"),
+  inspectConfig: (path: string) =>
+    invoke<InstanceCandidate>("inspect_codex_instance_config", { path }),
+  register: (
+    instance: Omit<CodexInstance, "id" | "userDataDir"> & {
+      userDataDir: string | null;
+    },
+  ) => invoke<CodexInstance>("register_codex_instance", { ...instance }),
   read: (id: string) => invoke<InstanceConfig>("read_codex_instance", { id }),
   save: (id: string, expectedRevision: string, config: string) =>
     invoke<InstanceConfig>("save_codex_instance", {

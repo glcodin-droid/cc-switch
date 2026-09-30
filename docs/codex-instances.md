@@ -8,9 +8,14 @@ own config, authentication, conversations, and Electron data.
 
 1. Select **Codex**. The top bar now has an instance menu styled like the existing
    project picker. **Default instance** retains the original global provider flow.
-2. Choose **Register existing instance** in that menu. Enter a name, an existing
-   absolute config directory containing `config.toml`, and a separate desktop-data
-   directory. Optionally choose an installed macOS app/launcher.
+2. Choose **Add existing instance**. Select a detected config by its name, model,
+   and path; search filters the list. Discovery checks immediate `.codex`,
+   `.codex-*`, and `.codex_*` folders in your user directory, plus CC Switch's
+   configured Codex home. It excludes invalid and already registered configs;
+   it does not recursively search projects. For other locations, choose
+   **Choose file**: only TOML files appear and the selected file must be
+   a valid, regular `config.toml`. Give the chosen config a recognizable name.
+   No directory needs to be entered to manage its providers.
 3. Select the registered instance. The main page uses the original provider cards;
    it imports the current config as the first card without copying its login.
 4. Use the normal **Add**, **Edit**, **Duplicate**, **Enable**, and **Delete** controls.
@@ -18,7 +23,14 @@ own config, authentication, conversations, and Electron data.
    card updates its `config.toml`; saving an inactive card only updates that
    instance's provider library. Enabling a card writes its routing/model settings
    while retaining the target home's unrelated settings.
-5. Launch from the instance menu. Restart the corresponding Codex after config
+5. To enable launching, expand **Launch settings** while adding an instance.
+   Pick a detected Codex app from the system/user Applications folders or browse
+   for your existing launcher. **Window data location** stores client cache and
+   window state; it is not your project or model configuration. Leaving it blank
+   assigns an independent, stable location under CC Switch's `codex-desktop`
+   directory, created on first launch. For a custom launcher with fixed paths,
+   select its original window data location and match its config path.
+   Launch from the instance menu. Restart the corresponding Codex after config
    changes. An environment-key setup should use its existing `.app` launcher;
    its hardcoded paths must match the registration.
 
@@ -61,7 +73,15 @@ launch.
 
 ## Release and installation
 
-Version `3.20.4-codex.1` is a macOS Apple Silicon prerelease named **CC Switch Codex**.
+### Changes in 3.20.4-codex.2
+
+- Add instances through a searchable config picker using the original project-dialog layout.
+- Detect valid existing Codex homes, filter duplicate/registered configs, and validate manually selected files.
+- Show readable home-relative paths and keep launch settings optional.
+- Assign an independent window-data directory automatically when none is provided.
+
+
+Version `3.20.4-codex.2` is a macOS Apple Silicon prerelease named **CC Switch Codex**.
 Download ZIP or DMG from https://github.com/glcodin-droid/cc-switch/releases.
 This community build uses an ad-hoc signature, not Apple Developer ID notarization.
 macOS may require an explicit user decision in Privacy & Security on first open.
@@ -80,7 +100,8 @@ apps, but their config and launch adapters are not implemented in this release.
 ```sh
 pnpm typecheck
 pnpm test:unit
-cargo test --manifest-path src-tauri/Cargo.toml --lib codex_instances::tests
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
 The macOS UI smoke test uses two synthetic config homes and a harmless `.app`

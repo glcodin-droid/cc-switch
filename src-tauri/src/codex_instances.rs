@@ -30,6 +30,146 @@ pub struct CodexInstance {
     pub app_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceCandidate {
+    pub name: String,
+    pub config_dir: PathBuf,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceDiscovery {
+    pub configs: Vec<InstanceCandidate>,
+    pub apps: Vec<PathBuf>,
+    pub search_dir: PathBuf,
+}
+
+fn inspect_config(home: &Path, existing: &[CodexInstance]) -> Result<InstanceCandidate, AppError> {
+    absolute_path(home)?;
+    let home = fs::canonicalize(home).map_err(|e| AppError::io(home, e))?;
+    if existing
+        .iter()
+        .any(|i| overlaps(&home, &i.config_dir) || overlaps(&home, &i.user_data_dir))
+    {
+        return Err(invalid(
+            "这个配置已在管理列表中，或与现有实例目录重叠",
+            "This config is already managed or overlaps an existing instance",
+        ));
+    }
+    let path = config_path(&home)?;
+    let text = fs::read_to_string(&path).map_err(|e| AppError::io(&path, e))?;
+    let doc = text.parse::<DocumentMut>().map_err(|_| {
+        invalid(
+            "所选 config.toml 格式有误，请先修复",
+            "The selected config.toml is not valid TOML",
+        )
+    })?;
+    let folder = home.file_name().unwrap_or_default().to_string_lossy();
+    let name = if folder == ".codex" {
+        "Codex".into()
+    } else if let Some(suffix) = folder
+        .strip_prefix(".codex-")
+        .or_else(|| folder.strip_prefix(".codex_"))
+    {
+        format!("Codex · {suffix}")
+    } else {
+        folder.into_owned()
+    };
+    Ok(InstanceCandidate {
+        name,
+        model: doc.get("model").and_then(Item::as_str).map(str::to_owned),
+        provider: doc
+            .get("model_provider")
+            .and_then(Item::as_str)
+            .map(str::to_owned),
+        config_dir: home,
+    })
+}
+
+fn discover_configs(
+    home: &Path,
+    configured: &Path,
+    existing: &[CodexInstance],
+) -> Vec<InstanceCandidate> {
+    let mut paths = vec![configured.to_path_buf()];
+    // Only inspect direct Codex homes, never recurse through projects or history.
+    if let Ok(entries) = fs::read_dir(home) {
+        paths.extend(entries.flatten().filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            (name == ".codex" || name.starts_with(".codex-") || name.starts_with(".codex_"))
+                .then(|| entry.path())
+        }));
+    }
+    let mut configs: Vec<_> = paths
+        .iter()
+        .filter_map(|p| inspect_config(p, existing).ok())
+        .collect();
+    configs.sort_by(|a, b| a.config_dir.cmp(&b.config_dir));
+    configs.dedup_by(|a, b| a.config_dir == b.config_dir);
+    configs
+}
+
+fn discover_apps(roots: &[PathBuf]) -> Vec<PathBuf> {
+    let mut apps = Vec::new();
+    for root in roots {
+        if let Ok(entries) = fs::read_dir(root) {
+            apps.extend(entries.flatten().filter_map(|entry| {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                let is_codex = (name.contains("codex") && !name.starts_with("cc switch"))
+                    || path
+                        .join("Contents/PlugIns/CodexDockTilePlugin.docktileplugin")
+                        .is_dir();
+                (is_codex && name.ends_with(".app") && path.join("Contents/Info.plist").is_file())
+                    .then(|| fs::canonicalize(path).ok())
+                    .flatten()
+            }));
+        }
+    }
+    apps.sort();
+    apps.dedup();
+    apps
+}
+
+#[tauri::command]
+pub fn discover_codex_instances() -> Result<InstanceDiscovery, String> {
+    let existing = read_registry(&registry_path()).map_err(|e| e.to_string())?;
+    let home = crate::config::get_home_dir();
+    Ok(InstanceDiscovery {
+        configs: discover_configs(
+            &home,
+            &crate::codex_config::get_codex_config_dir(),
+            &existing,
+        ),
+        apps: discover_apps(&[PathBuf::from("/Applications"), home.join("Applications")]),
+        search_dir: home,
+    })
+}
+
+#[tauri::command]
+pub fn inspect_codex_instance_config(path: PathBuf) -> Result<InstanceCandidate, String> {
+    if path.file_name().and_then(|n| n.to_str()) != Some("config.toml") {
+        return Err(invalid(
+            "请选择 Codex 的 config.toml 文件",
+            "Choose Codex's config.toml file",
+        )
+        .to_string());
+    }
+    let existing = read_registry(&registry_path()).map_err(|e| e.to_string())?;
+    inspect_config(path.parent().unwrap_or(Path::new("")), &existing).map_err(|e| e.to_string())
+}
+
+fn automatic_data_dir(root: &Path, home: &Path) -> Result<PathBuf, AppError> {
+    let home = fs::canonicalize(home).map_err(|e| AppError::io(home, e))?;
+    // Stable across unregister/register, without moving or copying existing data.
+    let key = revision(&home.to_string_lossy());
+    Ok(root.join("codex-desktop").join(key))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceConfig {
@@ -255,12 +395,18 @@ pub fn list_codex_instances() -> Result<Vec<CodexInstance>, String> {
 pub fn register_codex_instance(
     name: String,
     config_dir: PathBuf,
-    user_data_dir: PathBuf,
+    user_data_dir: Option<PathBuf>,
     app_path: Option<PathBuf>,
 ) -> Result<CodexInstance, String> {
     let _guard = OPERATIONS.lock().map_err(|e| e.to_string())?;
     let path = registry_path();
     let mut list = read_registry(&path).map_err(|e| e.to_string())?;
+    let user_data_dir = match user_data_dir.filter(|p| !p.as_os_str().is_empty()) {
+        Some(path) => path,
+        None => {
+            automatic_data_dir(&get_app_config_dir(), &config_dir).map_err(|e| e.to_string())?
+        }
+    };
     let item = validate_instance(
         CodexInstance {
             id: uuid::Uuid::new_v4().to_string(),
@@ -449,6 +595,17 @@ fn launch_args(item: &CodexInstance) -> Vec<String> {
     ]
 }
 
+fn ensure_window_data_dir(path: &Path) -> Result<(), AppError> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path).map_err(|e| AppError::io(path, e))
+}
+
 #[tauri::command]
 pub fn launch_codex_instance(id: String) -> Result<(), String> {
     let item = get_instance(&id).map_err(|e| e.to_string())?;
@@ -475,6 +632,7 @@ pub fn launch_codex_instance(id: String) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
+        ensure_window_data_dir(&item.user_data_dir).map_err(|e| e.to_string())?;
         // No shell evaluation, no global launchctl environment, no process kill.
         let result = std::process::Command::new("/usr/bin/open")
             .args(launch_args(&item))
@@ -861,6 +1019,116 @@ mod tests {
         assert!(a.config_dir.join("config.toml").exists());
         fs::write(file.clone(), "invalid json").unwrap();
         assert!(read_registry(&file).is_err());
+    }
+    #[test]
+    fn discovery_filters_invalid_registered_and_unrelated_configs() {
+        let temp = tempfile::tempdir().unwrap();
+        let personal = instance(temp.path(), ".codex");
+        let work = instance(temp.path(), ".codex-work");
+        let custom = instance(temp.path(), "custom-home");
+        let bad = instance(temp.path(), ".codex-broken");
+        fs::write(bad.config_dir.join("config.toml"), "[broken").unwrap();
+        instance(temp.path(), "unrelated-project");
+        fs::create_dir(temp.path().join(".codex-empty")).unwrap();
+        let found = discover_configs(
+            temp.path(),
+            &custom.config_dir,
+            std::slice::from_ref(&personal),
+        );
+        assert_eq!(found.len(), 2);
+        assert!(found
+            .iter()
+            .any(|c| c.config_dir == work.config_dir && c.model.as_deref() == Some("gpt-6-astra")));
+        assert!(found.iter().any(|c| c.config_dir == custom.config_dir));
+        assert!(!serde_json::to_string(&found)
+            .unwrap()
+            .contains("keep-login"));
+        assert_eq!(
+            fs::read_to_string(personal.config_dir.join("auth.json")).unwrap(),
+            "keep-login"
+        );
+    }
+    #[test]
+    fn discovery_deduplicates_canonical_paths_and_rejects_unsafe_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = instance(temp.path(), ".codex");
+        assert_eq!(discover_configs(temp.path(), &a.config_dir, &[]).len(), 1);
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&a.config_dir, temp.path().join(".codex-alias")).unwrap();
+            assert_eq!(discover_configs(temp.path(), &a.config_dir, &[]).len(), 1);
+            let b = instance(temp.path(), ".codex-link");
+            fs::remove_file(b.config_dir.join("config.toml")).unwrap();
+            std::os::unix::fs::symlink(
+                a.config_dir.join("config.toml"),
+                b.config_dir.join("config.toml"),
+            )
+            .unwrap();
+            assert!(inspect_config(&b.config_dir, &[]).is_err());
+        }
+        fs::write(
+            a.config_dir.join("config.toml"),
+            vec![b' '; MAX_CONFIG_BYTES as usize + 1],
+        )
+        .unwrap();
+        assert!(inspect_config(&a.config_dir, &[]).is_err());
+        assert!(inspect_codex_instance_config(a.config_dir.join("other.toml")).is_err());
+    }
+    #[test]
+    fn automatic_window_data_is_separate_stable_and_does_not_create_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut a = instance(temp.path(), "a");
+        let mut b = instance(temp.path(), "b");
+        let storage = temp.path().join("manager");
+        a.user_data_dir = automatic_data_dir(&storage, &a.config_dir).unwrap();
+        b.user_data_dir = automatic_data_dir(&storage, &b.config_dir).unwrap();
+        assert_ne!(a.user_data_dir, b.user_data_dir);
+        assert_eq!(
+            a.user_data_dir,
+            automatic_data_dir(&storage, &a.config_dir).unwrap()
+        );
+        validate_instance(a.clone(), std::slice::from_ref(&b)).unwrap();
+        assert!(!storage.exists());
+        ensure_window_data_dir(&a.user_data_dir).unwrap();
+        assert!(a.user_data_dir.is_dir());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&a.user_data_dir).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(a.config_dir.join("auth.json")).unwrap(),
+            "keep-login"
+        );
+    }
+    #[test]
+    fn app_discovery_excludes_unrelated_apps_and_our_manager() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in [
+            "Codex.app",
+            "Codex Work.app",
+            "CC Switch Codex.app",
+            "ChatGPT.app",
+            "Other.app",
+        ] {
+            let contents = temp.path().join(name).join("Contents");
+            fs::create_dir_all(&contents).unwrap();
+            fs::write(contents.join("Info.plist"), "test").unwrap();
+        }
+        fs::create_dir_all(
+            temp.path()
+                .join("ChatGPT.app/Contents/PlugIns/CodexDockTilePlugin.docktileplugin"),
+        )
+        .unwrap();
+        fs::create_dir(temp.path().join("Codex Invalid.app")).unwrap();
+        let apps = discover_apps(&[temp.path().into(), temp.path().into()]);
+        assert_eq!(apps.len(), 3);
+        assert!(!apps
+            .iter()
+            .any(|p| p.to_string_lossy().contains("CC Switch")));
     }
     #[test]
     fn preset_preserves_instance_headers_and_unrelated_settings() {
